@@ -2,19 +2,19 @@ package server
 
 import (
 	"TicTacToe_Server/game"
+	"bufio"
 	"fmt"
 	"net"
 )
 
 func handleConnection(con net.Conn) {
-	buffer := make([]byte, 64)
-	n, err := con.Read(buffer)
+	request, err := bufio.NewReader(con).ReadString('\n')
 	if err != nil {
 		return
 	}
-	request := string(buffer[:n])
+	request = request[:len(request)-1]
 	// Log
-	fmt.Println("handleConnection/request: ", request, "len: ", len(request))
+	fmt.Println("handleConnection/request: ", request, ", len: ", len(request))
 
 	switch request {
 	case "Game":

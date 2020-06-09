@@ -1,23 +1,25 @@
 package game
 
 import (
+	"bufio"
 	"fmt"
 )
 
 func (g game) abort() {
 	fmt.Println("game.abort()")
-	g.sendAll([]byte("Error"))
+	g.sendAll("abort", []byte("Error"))
 }
 
 func (g game) end(winner byte) {
 	fmt.Println("game.end() | winner:", winner)
-	msg := []byte("GameEnded")
-	msg = append(msg, winner)
-	g.sendAll(msg)
+	msg := make([]byte, 1)
+	msg[0] = winner
+	g.sendAll("end", msg)
 }
 
 func (g game) start() {
-	g.sendAll([]byte("GameStarted"))
+	g.send1("turn", []byte("1"))
+	g.send2("turn", []byte("0"))
 	go func() {
 		defer func() {
 			if p := recover(); p != nil {
@@ -26,17 +28,19 @@ func (g game) start() {
 			}
 		}()
 		g.board = make([]byte, 9)
-		turn, buff, moveCount := byte(1), make([]byte, 32), 0
-		activePlayer := g.p1
+		turn, moveCount := byte(1), 0
+		ioChan1, ioChan2 := bufio.NewReader(g.p1.con),
+			bufio.NewReader(g.p2.con)
+		activePlayer := ioChan1
 		for {
 			// wait for active player
-			_, err := activePlayer.con.Read(buff)
+			req, err := activePlayer.ReadBytes('\n')
 			if err != nil {
 				fmt.Println("game.readErr:", err)
 				g.abort()
 				return
 			}
-			v := int(buff[0])
+			v := int(req[0])
 			fmt.Println("v:", v)
 			if v >= len(g.board) || g.board[v] != 0 {
 				for i := 0; i < len(g.board); i++ {
@@ -46,7 +50,7 @@ func (g game) start() {
 					}
 				}
 			} else {
-				g.board[v] = 1
+				g.board[v] = turn
 			}
 			// check for EOG
 			// ** change this for dynamic games
@@ -54,6 +58,7 @@ func (g game) start() {
 				r := i * 3
 				if g.board[r] != 0 &&
 					g.board[r] == g.board[r+1] && g.board[r] == g.board[r+2] {
+					fmt.Println("case 1")
 					g.end(turn)
 					return
 				}
@@ -62,6 +67,7 @@ func (g game) start() {
 				r := i
 				if g.board[r] != 0 &&
 					g.board[r] == g.board[r+3] && g.board[r] == g.board[r+6] {
+					fmt.Println("case 2")
 					g.end(turn)
 					return
 				}
@@ -73,12 +79,14 @@ func (g game) start() {
 			}
 			// change turn
 			if turn == 1 {
-				activePlayer = g.p2
+				activePlayer = ioChan2
 				turn = 2
 			} else {
-				activePlayer = g.p1
+				activePlayer = ioChan1
 				turn = 1
 			}
+			// send state
+			g.sendAll("state", g.board)
 		}
 	}()
 }
